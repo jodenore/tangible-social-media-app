@@ -1,4 +1,3 @@
-const { default: mongoose } = require("mongoose");
 const Player = require("../models/Player");
 const User = require("../models/User");
 
@@ -10,15 +9,14 @@ async function getAllPlayers(req, res) {
 
     if (search) {
       players = players.filter((player) => {
-        // added search for name and team
         return (
-          player.fullName.toLowerCase().includes(search.toLowerCase()) ||
-          player.currentTeam.toLowerCase().includes(search.toLowerCase()) ||
-          player.position.toLowerCase().includes(search.toLowerCase())
+          player.fullName?.toLowerCase().includes(search.toLowerCase()) ||
+          player.currentTeam?.toLowerCase().includes(search.toLowerCase()) ||
+          player.position?.toLowerCase().includes(search.toLowerCase())
         );
       });
     }
-    // Added filter for sport
+
     if (sport) {
       players = players.filter(
         (player) => player.sport.toLowerCase() === sport.toLowerCase(),
@@ -45,10 +43,10 @@ async function getAllPlayers(req, res) {
       status: "SUCCESS",
       data: players,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -58,7 +56,6 @@ async function getPlayerById(req, res) {
     const player = await Player.findByIdAndUpdate(
       req.params.id,
       {
-        // Increments the views by 1
         $inc: { views: 1 },
       },
       {
@@ -77,10 +74,10 @@ async function getPlayerById(req, res) {
       status: "SUCCESS",
       data: player,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -99,10 +96,10 @@ async function getRandomPlayer(req, res) {
       status: "SUCCESS",
       data: player,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -121,10 +118,10 @@ async function getMostViewedPlayer(req, res) {
       status: "SUCCESS",
       data: player,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -136,10 +133,10 @@ async function createPlayer(req, res) {
       status: "SUCCESS",
       data: player,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -161,35 +158,22 @@ async function updatePlayer(req, res) {
       status: "SUCCESS",
       data: player,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
 
 async function addFavouritePlayer(req, res) {
   try {
-    let { id, playerId } = req.params;
-    if (!id || !playerId) {
-      return res.status(404).json({
-        status: "FAILED",
-        message: "Invalid id or playerId",
-      });
-    }
+    const { id, playerId } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(playerId)) {
-      return res.status(400).json({
+    if (!req.user._id.equals(id)) {
+      return res.status(403).json({
         status: "FAILED",
-        message: "Invalid Player Id",
-      });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(404).json({
-        status: "FAILED",
-        message: "Invalid User Id",
+        message: "You can only update your own favourite players",
       });
     }
 
@@ -243,19 +227,12 @@ async function addFavouritePlayer(req, res) {
 
 async function removeFavouritePlayer(req, res) {
   try {
-    let { id, playerId } = req.params;
+    const { id, playerId } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(playerId)) {
-      return res.status(400).json({
+    if (!req.user._id.equals(id)) {
+      return res.status(403).json({
         status: "FAILED",
-        message: "Invalid Player Id",
-      });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        status: "FAILED",
-        message: "Invalid User Id",
+        message: "You can only update your own favourite players",
       });
     }
 
@@ -281,9 +258,9 @@ async function removeFavouritePlayer(req, res) {
     );
 
     if (!isFavourited) {
-      return res.json({
-        status: "Failed",
-        message: "Player is not in favourites.",
+      return res.status(400).json({
+        status: "FAILED",
+        message: "Player is not in favourites",
       });
     }
 
@@ -322,10 +299,10 @@ async function deletePlayer(req, res) {
       status: "SUCCESS",
       message: "Player deleted successfully",
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }

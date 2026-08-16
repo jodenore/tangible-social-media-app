@@ -9,13 +9,18 @@ const {
 } = require("../controllers/playerController");
 const playerRouter = require("express").Router();
 
+const authMiddleware = require("../middleware/authMiddleware");
+const validateObjectId = require("../middleware/validateObjectId");
+
 playerRouter.get("/", getAllPlayers);
 playerRouter.get("/random", getRandomPlayer);
 playerRouter.get("/mostviewed", getMostViewedPlayer);
+playerRouter.get("/:id", validateObjectId("id"), getPlayerById);
 
-playerRouter.get("/:id", getPlayerById);
+playerRouter.use(authMiddleware);
+
 playerRouter.post("/", createPlayer);
-playerRouter.patch("/:id", updatePlayer);
-playerRouter.delete("/:id", deletePlayer);
+playerRouter.patch("/:id", validateObjectId("id"), updatePlayer);
+playerRouter.delete("/:id", validateObjectId("id"), deletePlayer);
 
 module.exports = playerRouter;

@@ -11,10 +11,10 @@ async function getAllComments(req, res) {
       status: "SUCCESS",
       data: comments,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -36,10 +36,10 @@ async function getCommentById(req, res) {
       status: "SUCCESS",
       data: comment,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -48,16 +48,16 @@ async function fetchCommentsByPostId(req, res) {
   try {
     const comments = await Comment.find({ post: req.params.postId })
       .populate("author", "username displayName avatar")
-      .populate("post", "content player");
+      .populate("post", "player");
 
     return res.json({
       status: "SUCCESS",
       data: comments,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -72,17 +72,20 @@ async function getCommentsByAuthor(req, res) {
       status: "SUCCESS",
       data: comments,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
 
 async function createComment(req, res) {
   try {
-    const comment = await Comment.create(req.body);
+    const comment = await Comment.create({
+      ...req.body,
+      author: req.user._id,
+    });
 
     const populatedComment = await comment.populate([
       {
@@ -99,22 +102,17 @@ async function createComment(req, res) {
       status: "SUCCESS",
       data: populatedComment,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
 
 async function updateComment(req, res) {
   try {
-    const comment = await Comment.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    })
-      .populate("author", "username displayName avatar")
-      .populate("post", "content player");
+    const comment = await Comment.findById(req.params.id);
 
     if (!comment) {
       return res.status(404).json({
@@ -123,37 +121,43 @@ async function updateComment(req, res) {
       });
     }
 
+    if (!comment.author.equals(req.user._id)) {
+      return res.status(403).json({
+        status: "FAILED",
+        message: "You can only update your own comments",
+      });
+    }
+
+    comment.content = req.body.content ?? comment.content;
+    await comment.save();
+
+    const updatedComment = await comment.populate([
+      {
+        path: "author",
+        select: "username displayName avatar",
+      },
+      {
+        path: "post",
+        select: "content player",
+      },
+    ]);
+
     return res.json({
       status: "SUCCESS",
-      data: comment,
+      data: updatedComment,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
 
 async function likeComment(req, res) {
   try {
-    let { userId } = req.body;
+    const userId = req.user._id;
     const { id } = req.params;
-
-    // check if userId is provided
-    if (!userId) {
-      return res.status(400).json({
-        status: "FAILED",
-        message: "User ID is required",
-      });
-    }
-    // mongoose isValid
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({
-        status: "FAILED",
-        message: "Invalid userID",
-      });
-    }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -162,9 +166,8 @@ async function likeComment(req, res) {
       });
     }
 
-    userId = new mongoose.Types.ObjectId(userId);
     const comment = await Comment.findByIdAndUpdate(
-      req.params.id,
+      id,
       {
         $addToSet: {
           likes: userId,
@@ -174,7 +177,7 @@ async function likeComment(req, res) {
         new: true,
         runValidators: true,
       },
-    ).populate("likes", "username displayname bio avatar");
+    ).populate("likes", "username displayName bio avatar");
 
     if (!comment) {
       return res.status(404).json({
@@ -187,32 +190,18 @@ async function likeComment(req, res) {
       status: "SUCCESS",
       data: comment,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
 
 async function unlikeComment(req, res) {
   try {
-    let { userId } = req.body;
+    const userId = req.user._id;
     const { id } = req.params;
-
-    if (!userId) {
-      return res.status(400).json({
-        status: "FAILED",
-        message: "User ID is required",
-      });
-    }
-    // mongoose isValid
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({
-        status: "FAILED",
-        message: "Invalid userID",
-      });
-    }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -221,37 +210,7 @@ async function unlikeComment(req, res) {
       });
     }
 
-    userId = new mongoose.Types.ObjectId(userId);
-
-    const comment = await Comment.findById(req.params.id);
-
-    // check if id in likes if not 500
-    if (!comment.likes.includes(userId)) {
-      return res.status(404).json({
-        status: "FAILED",
-        message: "User not found in likes",
-      });
-    }
-
-    comment.likes = comment.likes.filter((likeId) => !likeId.equals(userId));
-
-    await comment.save();
-
-    return res.json({
-      status: "SUCCESS",
-      data: comment,
-    });
-  } catch (e) {
-    return res.status(500).json({
-      status: "FAILED",
-      message: e.message,
-    });
-  }
-}
-
-async function deleteComment(req, res) {
-  try {
-    const comment = await Comment.findByIdAndDelete(req.params.id);
+    const comment = await Comment.findById(id);
 
     if (!comment) {
       return res.status(404).json({
@@ -260,14 +219,58 @@ async function deleteComment(req, res) {
       });
     }
 
+    const isLiked = comment.likes.some((likeId) => likeId.equals(userId));
+
+    if (!isLiked) {
+      return res.status(400).json({
+        status: "FAILED",
+        message: "Comment is not liked by this user",
+      });
+    }
+
+    comment.likes = comment.likes.filter((likeId) => !likeId.equals(userId));
+    await comment.save();
+
+    return res.json({
+      status: "SUCCESS",
+      data: comment,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "FAILED",
+      message: error.message,
+    });
+  }
+}
+
+async function deleteComment(req, res) {
+  try {
+    const comment = await Comment.findById(req.params.id);
+
+    if (!comment) {
+      return res.status(404).json({
+        status: "FAILED",
+        message: "Comment not found",
+      });
+    }
+
+    if (!comment.author.equals(req.user._id)) {
+      return res.status(403).json({
+        status: "FAILED",
+        message: "You can only delete your own comments",
+      });
+    }
+
+    await Comment.findByIdAndDelete(req.params.id);
+
     return res.json({
       status: "SUCCESS",
       message: "Comment deleted successfully",
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }

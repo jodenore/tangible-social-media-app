@@ -5,6 +5,8 @@ const playerRouter = require("./routes/playerRoutes");
 const userRouter = require("./routes/userRoutes");
 const postRouter = require("./routes/postRoutes");
 const commentRouter = require("./routes/commentRoutes");
+const authRouter = require("./routes/authRoutes");
+const notFoundMiddleware = require("./middleware/notFoundMiddleware");
 const app = express();
 
 // Body parser
@@ -28,9 +30,14 @@ app.get("/", (req, res) => {
   });
 });
 
+app.use("/api/auth", authRouter);
 app.use("/api/players", playerRouter);
 app.use("/api/users", userRouter);
 app.use("/api/posts", postRouter);
 app.use("/api/comments", commentRouter);
 
+app.use(notFoundMiddleware);
+
 module.exports = app;
+
+

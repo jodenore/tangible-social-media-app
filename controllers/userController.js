@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
+
 async function getAllUsers(req, res) {
   try {
     const users = await User.find().populate("favouritePlayers");
@@ -13,20 +14,20 @@ async function getAllUsers(req, res) {
       status: "SUCCESS",
       data: users,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
 
 async function getUserById(req, res) {
   try {
-    const users = await User.findById(req.params.id).populate(
+    const user = await User.findById(req.params.id).populate(
       "favouritePlayers",
     );
-    if (!users) {
+    if (!user) {
       return res.status(404).json({
         status: "FAILED",
         message: "User not found",
@@ -34,12 +35,12 @@ async function getUserById(req, res) {
     }
     return res.json({
       status: "SUCCESS",
-      data: users,
+      data: user,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
@@ -77,7 +78,7 @@ async function createUser(req, res) {
     delete userResponse.passwordHash;
 
     return res.status(201).json({
-      status: "Success",
+      status: "SUCCESS",
       data: userResponse,
     });
   } catch (error) {
@@ -90,10 +91,31 @@ async function createUser(req, res) {
 
 async function updateUser(req, res) {
   try {
-    const user = await User.findByIdAndUpdate(req.params.id, req.body, {
+    if (!req.user._id.equals(req.params.id)) {
+      return res.status(403).json({
+        status: "FAILED",
+        message: "You can only update your own profile",
+      });
+    }
+
+    const allowedUpdates = {
+      username: req.body.username,
+      displayName: req.body.displayName,
+      email: req.body.email,
+      avatar: req.body.avatar,
+      bio: req.body.bio,
+    };
+
+    Object.keys(allowedUpdates).forEach((key) => {
+      if (allowedUpdates[key] === undefined) {
+        delete allowedUpdates[key];
+      }
+    });
+
+    const user = await User.findByIdAndUpdate(req.user._id, allowedUpdates, {
       new: true,
       runValidators: true,
-    });
+    }).select("-passwordHash");
 
     if (!user) {
       return res.status(404).json({
@@ -115,7 +137,14 @@ async function updateUser(req, res) {
 
 async function deleteUser(req, res) {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    if (!req.user._id.equals(req.params.id)) {
+      return res.status(403).json({
+        status: "FAILED",
+        message: "You can only delete your own profile",
+      });
+    }
+
+    const user = await User.findByIdAndDelete(req.user._id);
     if (!user) {
       return res.status(404).json({
         status: "FAILED",

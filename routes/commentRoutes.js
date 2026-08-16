@@ -10,15 +10,27 @@ const {
 } = require("../controllers/commentController");
 const commentRouter = require("express").Router();
 
+const authMiddleware = require("../middleware/authMiddleware");
+const validateObjectId = require("../middleware/validateObjectId");
+
+commentRouter.get(
+  "/post/:postId",
+  validateObjectId("postId"),
+  fetchCommentsByPostId,
+);
+commentRouter.get(
+  "/author/:authorId",
+  validateObjectId("authorId"),
+  getCommentsByAuthor,
+);
+commentRouter.get("/:id", validateObjectId("id"), getCommentById);
+
+commentRouter.use(authMiddleware);
+
 commentRouter.post("/create", createComment);
-commentRouter.get("/post/:postId", fetchCommentsByPostId);
-commentRouter.get("/author/:authorId", getCommentsByAuthor);
-
-commentRouter.get("/:id", getCommentById);
-commentRouter.patch("/:id/like", likeComment);
-commentRouter.patch("/:id/unlike", unlikeComment);
-commentRouter.patch("/:id", updateComment);
-
-commentRouter.delete("/:id", deleteComment);
+commentRouter.patch("/:id/like", validateObjectId("id"), likeComment);
+commentRouter.patch("/:id/unlike", validateObjectId("id"), unlikeComment);
+commentRouter.patch("/:id", validateObjectId("id"), updateComment);
+commentRouter.delete("/:id", validateObjectId("id"), deleteComment);
 
 module.exports = commentRouter;

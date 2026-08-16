@@ -12,13 +12,28 @@ const {
   deleteUser,
 } = require("../controllers/userController");
 
-userRouter.get("/", getAllUsers);
-userRouter.get("/:id", getUserById);
-userRouter.post("/", createUser);
-userRouter.patch("/:id/favourite-players/:playerId", addFavouritePlayer);
-userRouter.patch("/:id", updateUser);
+const authMiddleware = require("../middleware/authMiddleware");
+const validateObjectId = require("../middleware/validateObjectId");
 
-userRouter.delete("/:id/favourite-players/:playerId", removeFavouritePlayer);
-userRouter.delete("/:id", deleteUser);
+userRouter.get("/", getAllUsers);
+userRouter.get("/:id", validateObjectId("id"), getUserById);
+
+userRouter.use(authMiddleware);
+
+userRouter.post("/", createUser);
+userRouter.patch(
+  "/:id/favourite-players/:playerId",
+  validateObjectId("id"),
+  validateObjectId("playerId"),
+  addFavouritePlayer,
+);
+userRouter.patch("/:id", validateObjectId("id"), updateUser);
+userRouter.delete(
+  "/:id/favourite-players/:playerId",
+  validateObjectId("id"),
+  validateObjectId("playerId"),
+  removeFavouritePlayer,
+);
+userRouter.delete("/:id", validateObjectId("id"), deleteUser);
 
 module.exports = userRouter;

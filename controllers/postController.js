@@ -8,17 +8,16 @@ async function getAllPosts(req, res) {
       .populate("author", "username displayName avatar")
       .populate("player", "fullName slug sport position currentTeam image");
 
-    // Filter by sport if provided - radio buttons
     if (sport) {
       posts = posts.filter((post) => post?.player?.sport === sport);
     }
+
     if (search) {
       posts = posts.filter((post) =>
-        post.content.toLowerCase().includes(search),
+        post.content.toLowerCase().includes(search.toLowerCase()),
       );
     }
 
-    // Sorting logic
     if (sortBy) {
       if (sortBy.toLowerCase() === "latest") {
         posts.sort((a, b) => b.createdAt - a.createdAt);
@@ -106,7 +105,10 @@ async function fetchPostsByAuthorId(req, res) {
 
 async function createPost(req, res) {
   try {
-    const post = await Post.create(req.body);
+    const post = await Post.create({
+      ...req.body,
+      author: req.user._id,
+    });
 
     const populatedPost = await post.populate([
       {
@@ -121,7 +123,7 @@ async function createPost(req, res) {
 
     return res.status(201).json({
       status: "SUCCESS",
-      data: req.body.player ? populatedPost : post,
+      data: populatedPost,
     });
   } catch (error) {
     return res.status(500).json({
@@ -133,12 +135,7 @@ async function createPost(req, res) {
 
 async function updatePost(req, res) {
   try {
-    const post = await Post.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    })
-      .populate("author", "username displayName avatar")
-      .populate("player", "fullName slug sport position currentTeam image");
+    const post = await Post.findById(req.params.id);
 
     if (!post) {
       return res.status(404).json({
@@ -147,9 +144,33 @@ async function updatePost(req, res) {
       });
     }
 
+    if (!post.author.equals(req.user._id)) {
+      return res.status(403).json({
+        status: "FAILED",
+        message: "You can only update your own posts",
+      });
+    }
+
+    post.content = req.body.content ?? post.content;
+    post.image = req.body.image ?? post.image;
+    post.player = req.body.player ?? post.player;
+
+    await post.save();
+
+    const updatedPost = await post.populate([
+      {
+        path: "author",
+        select: "username displayName avatar",
+      },
+      {
+        path: "player",
+        select: "fullName slug sport position currentTeam image",
+      },
+    ]);
+
     return res.json({
       status: "SUCCESS",
-      data: post,
+      data: updatedPost,
     });
   } catch (error) {
     return res.status(500).json({
@@ -159,95 +180,22 @@ async function updatePost(req, res) {
   }
 }
 
-// added likePost and unlikePost functions
-
 async function likePost(req, res) {
-  // finds user id and pushes it to the likes array
-  let { userId } = req.body;
-  // post id
-  const { id } = req.params;
-
-  if (!userId) {
-    return res.status(400).json({
-      status: "FAILED",
-      message: "userId is required",
-    });
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(userId)) {
-    return res.status(400).json({
-      status: "FAILED",
-      message: "Invalid userId",
-    });
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({
-      status: "FAILED",
-      message: "Invalid postId",
-    });
-  }
-
-  userId = new mongoose.Types.ObjectId(userId);
-  const post = await Post.findByIdAndUpdate(
-    req.params.id,
-    {
-      $addToSet: {
-        likes: userId,
-      },
-    },
-    {
-      new: true,
-      runValidators: true,
-    },
-  );
-
-  if (!post) {
-    return res.status(404).json({
-      status: "FAILED",
-      message: "Post not found",
-    });
-  }
-
-  return res.json({
-    status: "SUCCESS",
-    data: post,
-  });
-}
-
-async function unlikePost(req, res) {
   try {
-    //
-    let { userId } = req.body;
+    const userId = req.user._id;
     const { id } = req.params;
-
-    if (!userId) {
-      return res.status(400).json({
-        status: "FAILED",
-        message: "userId is required",
-      });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({
-        status: "FAILED",
-        message: "Invalid userId",
-      });
-    }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         status: "FAILED",
-        message: "Invalid post id",
+        message: "Invalid postId",
       });
     }
-
-    userId = new mongoose.Types.ObjectId(userId);
 
     const post = await Post.findByIdAndUpdate(
       id,
       {
-        $pull: {
+        $addToSet: {
           likes: userId,
         },
       },
@@ -268,16 +216,27 @@ async function unlikePost(req, res) {
       status: "SUCCESS",
       data: post,
     });
-  } catch (e) {
+  } catch (error) {
     return res.status(500).json({
       status: "FAILED",
-      message: e.message,
+      message: error.message,
     });
   }
 }
-async function deletePost(req, res) {
+
+async function unlikePost(req, res) {
   try {
-    const post = await Post.findByIdAndDelete(req.params.id);
+    const userId = req.user._id;
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        status: "FAILED",
+        message: "Invalid postId",
+      });
+    }
+
+    const post = await Post.findById(id);
 
     if (!post) {
       return res.status(404).json({
@@ -285,6 +244,50 @@ async function deletePost(req, res) {
         message: "Post not found",
       });
     }
+
+    const isLiked = post.likes.some((likeId) => likeId.equals(userId));
+
+    if (!isLiked) {
+      return res.status(400).json({
+        status: "FAILED",
+        message: "Post is not liked by this user",
+      });
+    }
+
+    post.likes = post.likes.filter((likeId) => !likeId.equals(userId));
+    await post.save();
+
+    return res.json({
+      status: "SUCCESS",
+      data: post,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "FAILED",
+      message: error.message,
+    });
+  }
+}
+
+async function deletePost(req, res) {
+  try {
+    const post = await Post.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({
+        status: "FAILED",
+        message: "Post not found",
+      });
+    }
+
+    if (!post.author.equals(req.user._id)) {
+      return res.status(403).json({
+        status: "FAILED",
+        message: "You can only delete your own posts",
+      });
+    }
+
+    await Post.findByIdAndDelete(req.params.id);
 
     return res.json({
       status: "SUCCESS",
