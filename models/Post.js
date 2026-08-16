@@ -13,7 +13,7 @@ const postSchema = new mongoose.Schema(
     player: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Player",
-      required: true,
+      default: null,
     },
     content: {
       type: String,
@@ -41,4 +41,3 @@ const postSchema = new mongoose.Schema(
 const Post = mongoose.model("Post", postSchema);
 
 module.exports = Post;
-

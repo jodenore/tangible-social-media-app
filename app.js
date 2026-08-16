@@ -12,11 +12,11 @@ const app = express();
 app.use(express.json());
 
 // CORS
-app.use(cors("dev"));
+app.use(cors());
 
 // Morgan
 
-app.use(morgan());
+app.use(morgan("dev"));
 
 // Health Check route.
 
